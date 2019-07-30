@@ -33,7 +33,7 @@ class mqNodeClass:
         #建立消息队列连接
         credentials = pika.PlainCredentials(username= self.__mqUsername__, password=self.__mqPassword__)
         self.__connection__ = pika.BlockingConnection(
-            pika.ConnectionParameters(host=self.__host__,virtual_host=self.__mqVHost__, credentials=credentials))
+            pika.ConnectionParameters(host=self.__host__,virtual_host=self.__mqVHost__, credentials=credentials,heratbeat=0))
         self.__channel__    = self.__connection__.channel()
         #声明路由
         self.__channel__.exchange_declare(exchange='direct_logs', exchange_type='direct',durable=True)
