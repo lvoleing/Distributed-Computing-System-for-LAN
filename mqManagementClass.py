@@ -23,7 +23,7 @@ class mqManagement:
         self.__mqUsername__ = self.__rabbitMQ__["username"]
         self.__mqPassword__ = self.__rabbitMQ__["password"]
         self.__mqVHost__    = self.__rabbitMQ__["virtual_host"]
-        self.__nodeList__   = ["192.168.4.8","192.168.4.164","192.168.4.167"]
+        self.__nodeList__   = ["192.168.4.8","192.168.4.164","192.168.4.167","192.168.4.16"]
         
         self.__logger__     = logging.getLogger("GPUserver_logger")
         self.__logger__.setLevel(logging.DEBUG)
@@ -54,8 +54,7 @@ class mqManagement:
     
     def onResponse(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
-            body=body.decode('utf-8')
-            print(body,end='')
+            body = body.decode('utf-8')
             self.response = []
             self.response.append(body)
 
@@ -67,7 +66,8 @@ class mqManagement:
     def sentCmdToNode(self,nodeIP,cmdBody):
         if nodeIP in self.__nodeList__:
             routingKey = nodeIP
-            cmd = json.dumps(cmdBody)
+            heartBeat  = cmdBody["cmd"]
+            cmd        = json.dumps(cmdBody)
             self.response = None
             self.corr_id = str(uuid.uuid4())
             self.__channel__.basic_publish( exchange='direct_logs', 
@@ -79,15 +79,13 @@ class mqManagement:
                                             ),
                                             body=cmd)
             self.__logger__.info("successfully Sent %r to %r" % (cmd,routingKey))
-
-            self.__channel__.start_consuming()
-            
+            if heartBeat:
+                self.__channel__.start_consuming()
             while self.response is None:
                 self.__connection__.process_data_events()
-            ifSuccess = str(self.response)
-            self.__connection__.close()
+            ifSuccess = self.response
         else:
-            ifSuccess = False
+            ifSuccess = "don't exist"
             self.__logger__.warning("%r don't exist" % (nodeIP))
 
         return ifSuccess
@@ -111,7 +109,8 @@ if __name__ == "__main__":
         "destination": "192.168.4.164",
         "timestamp"  : "timestamp",
         "user"       : "userName",
-        "cmd"        : "nvidia-smi" 
+        "cmd"        : None 
     }
     ip = "192.168.4.8"
     result = test.sentCmdToNode(ip, value)
+    #print(result)
