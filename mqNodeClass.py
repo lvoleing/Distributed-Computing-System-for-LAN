@@ -8,7 +8,7 @@ import pexpect
 import subprocess
 
 class mqNodeClass:
-    def __init__(self,configFilePath = "../config/config.json"):
+    def __init__(self,configFilePath = "./config.json"):
         
         with open(configFilePath, "r", encoding='utf-8') as f:
             configObj = json.load(f)
@@ -33,7 +33,7 @@ class mqNodeClass:
         #建立消息队列连接
         credentials = pika.PlainCredentials(username= self.__mqUsername__, password=self.__mqPassword__)
         self.__connection__ = pika.BlockingConnection(
-            pika.ConnectionParameters(host=self.__host__,virtual_host=self.__mqVHost__, credentials=credentials,heratbeat=0))
+            pika.ConnectionParameters(host=self.__host__,virtual_host=self.__mqVHost__, credentials=credentials))
         self.__channel__    = self.__connection__.channel()
         #声明路由
         self.__channel__.exchange_declare(exchange='direct_logs', exchange_type='direct',durable=True)
@@ -43,10 +43,13 @@ class mqNodeClass:
         self.queue_name = result.method.queue
 
         #获得路由键
-        host                = socket.gethostbyname(socket.gethostname())
-        bindingKey          = host
+        s  = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8',80))
+        ip = s.getsockname()[0]
+        s.close()
+        bindingKey          = ip
         self.__channel__.queue_bind(exchange='direct_logs', queue=self.queue_name, routing_key=bindingKey)
-        print('Waiting for logs. To exit press CTRL+C')
+        print('%s Waiting for logs. To exit press CTRL+C' % bindingKey)
 
     def __queryMessage__(self):
 
@@ -60,18 +63,26 @@ class mqNodeClass:
         print("%r:%r" % (method.routing_key, body))
         body     = json.loads(body)
         cmd      = body["cmd"]
-        # process  = subprocess.Popen(cmd,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
-        # response = process.stdout.read().decode('gbk')
-        process  = pexpect.spawn(cmd)
-        while True:
-            response = process.readline().decode('utf-8')
+        if cmd:
+            process  = pexpect.spawn(cmd)
+            while True:
+                response = process.readline().decode("utf-8")
+                print(response,end='')
+                ch.basic_publish(exchange    ='',
+                                routing_key = props.reply_to,
+                                properties  = pika.BasicProperties(correlation_id = \
+                                                                props.correlation_id),
+                                body        =response)
+                if response == '':
+                    break
+        else:
+            response = "still alive!"
             ch.basic_publish(exchange    ='',
-                            routing_key = props.reply_to,
-                            properties  = pika.BasicProperties(correlation_id = \
-                                                            props.correlation_id),
-                            body        =response)
-            if response == '':
-                break
+                routing_key = props.reply_to,
+                properties  = pika.BasicProperties(correlation_id = \
+                                                props.correlation_id),
+                body        =response)
+
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     
